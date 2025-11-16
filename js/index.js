@@ -37,7 +37,7 @@ var S = {
 S.Drawing = (function () {
   var canvas,
       context,
-      renderFn
+      renderFn,
       requestFrame = window.requestAnimationFrame       ||
                      window.webkitRequestAnimationFrame ||
                      window.mozRequestAnimationFrame    ||
@@ -91,6 +91,7 @@ S.Drawing = (function () {
 
 S.UI = (function () {
   var canvas = document.querySelector('.canvas'),
+      overlay = document.querySelector('.overlay'),
       interval,
       isTouch = false, //('ontouchstart' in window || navigator.msMaxTouchPoints),
       currentAction,
@@ -280,7 +281,7 @@ S.UI = (function () {
     // });
 
     canvas.addEventListener('click', function (e) {
-      overlay.classList.remove('overlay--visible');
+      if(overlay){ overlay.classList.remove('overlay--visible'); }
     });
   }
 
