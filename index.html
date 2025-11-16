@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html>
 <head>
 <meta charset="utf-8">
@@ -29,6 +29,41 @@ html,body{
   </div>
 </div>
 <script>
+// 明确获取画布元素，避免依赖隐式全局变量
+var canvas = document.getElementById('canvas');
+var audioEnabled = false;
+var audioCtx = null;
+
+function enableAudioOnce(){
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    audioEnabled = true;
+  } catch(e) {
+    audioEnabled = false;
+  }
+}
+// 首次点击页面启用音频，满足浏览器自动播放策略
+window.addEventListener('click', enableAudioOnce, { once: true });
+
+function playPow(volume){
+  if(!audioEnabled || !audioCtx) return;
+  var osc = audioCtx.createOscillator();
+  var gain = audioCtx.createGain();
+  osc.type = 'triangle';
+  osc.frequency.value = 200 + Math.random()*400;
+  var now = audioCtx.currentTime;
+  gain.gain.setValueAtTime(Math.min(1, volume || 0.4), now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  osc.start(now);
+  osc.stop(now + 0.25);
+}
+
+function isImageReady(img){
+  return img && img.complete && img.naturalWidth > 0;
+}
+
 function initVars(){
 
 	pi=Math.PI;
@@ -43,17 +78,14 @@ function initVars(){
 	seedTimer=0;seedInterval=5,seedLife=100;gravity=.02;
 	seeds=new Array();
 	sparkPics=new Array();
-	s="https://cantelope.org/NYE/";
+	s="./assets/";
 	for(i=1;i<=10;++i){
 		sparkPic=new Image();
+		// sparkPic.crossOrigin = 'anonymous';
 		sparkPic.src=s+"spark"+i+".png";
 		sparkPics.push(sparkPic);
 	}
 	sparks=new Array();
-	pow1=new Audio(s+"pow1.ogg");
-	pow2=new Audio(s+"pow2.ogg");
-	pow3=new Audio(s+"pow3.ogg");
-	pow4=new Audio(s+"pow4.ogg");
 	frames = 0;
 }
 
@@ -106,8 +138,8 @@ function spawnSeed(){
 
 function splode(x,y,z){
 
-	t=5+parseInt(Math.random()*150);
-	sparkV=1+Math.random()*2.5;
+	t=40+parseInt(Math.random()*60);
+	sparkV=0.8+Math.random()*1.2;
 	type=parseInt(Math.random()*3);
 	switch(type){
 		case 0:
@@ -145,20 +177,15 @@ function splode(x,y,z){
 				}
 				break;
 		}
-		spark.radius=25+Math.random()*50;
+		spark.radius=8+Math.random()*18;
 		spark.alpha=1;
 		spark.trail=new Array();
 		sparks.push(spark);
 	}
-	switch(parseInt(Math.random()*4)){
-		case 0:	pow=new Audio(s+"pow1.ogg"); break;
-		case 1:	pow=new Audio(s+"pow2.ogg"); break;
-		case 2:	pow=new Audio(s+"pow3.ogg"); break;
-		case 3:	pow=new Audio(s+"pow4.ogg"); break;
-	}
+	// 计算距离并播放本地音效（在用户点击启用后）
 	d=Math.sqrt((x-playerX)*(x-playerX)+(y-playerY)*(y-playerY)+(z-playerZ)*(z-playerZ));
-	pow.volume=1.5/(1+d/10);
-	pow.play();
+	var vol = 1.5/(1+d/10);
+	playPow(vol);
 }
 
 function doLogic(){
@@ -179,8 +206,8 @@ function doLogic(){
 	}
 	for(i=0;i<sparks.length;++i){
 		if(sparks[i].alpha>0 && sparks[i].radius>5){
-			sparks[i].alpha-=.01;
-			sparks[i].radius/=1.02;
+			sparks[i].alpha-=.008;
+			sparks[i].radius/=1.015;
 			sparks[i].vy+=gravity;
 			point=new Object();
 			point.x=sparks[i].x;
@@ -197,7 +224,7 @@ function doLogic(){
 			}else{
 				sparks[i].trail.push(point);
 			}
-			if(sparks[i].trail.length>5)sparks[i].trail.splice(0,1);
+			if(sparks[i].trail.length>10)sparks[i].trail.splice(0,1);
 			sparks[i].x+=sparks[i].vx;
 			sparks[i].y+=sparks[i].vy;
 			sparks[i].z+=sparks[i].vz;
@@ -280,7 +307,7 @@ function draw(){
 						ctx.globalAlpha=j/sparks[i].trail.length*sparks[i].alpha/2;
 						ctx.beginPath();
 						ctx.moveTo(point1.x,point1.y);
-						ctx.lineWidth=1+sparks[i].radius*10/(sparks[i].trail.length-j)/(1+point2.d);
+						ctx.lineWidth=1+sparks[i].radius*6/(sparks[i].trail.length-j)/(1+point2.d);
 						ctx.lineTo(point2.x,point2.y);
 						ctx.stroke();
 						point1.x=point2.x;
@@ -288,8 +315,37 @@ function draw(){
 					}
 				}
 			}
+			// 使用叠加混合增强发光效果
+			ctx.globalCompositeOperation='lighter';
 			ctx.globalAlpha=sparks[i].alpha;
-			ctx.drawImage(sparks[i].img,point.x-size/2,point.y-size/2,size,size);
+			if(isImageReady(sparks[i].img)){
+				ctx.drawImage(sparks[i].img,point.x-size/2,point.y-size/2,size,size);
+			}else{
+				// 渐变降级：中心亮、边缘透明
+				var baseColor='#fff';
+				switch(sparks[i].img){
+					case sparkPics[0]: baseColor='#f84'; break;
+					case sparkPics[1]: baseColor='#84f'; break;
+					case sparkPics[2]: baseColor='#8ff'; break;
+					case sparkPics[3]: baseColor='#fff'; break;
+					case sparkPics[4]: baseColor='#4f8'; break;
+					case sparkPics[5]: baseColor='#f44'; break;
+					case sparkPics[6]: baseColor='#f84'; break;
+					case sparkPics[7]: baseColor='#84f'; break;
+					case sparkPics[8]: baseColor='#fff'; break;
+					case sparkPics[9]: baseColor='#44f'; break;
+				}
+				var r = Math.max(1, size/6);
+				var g = ctx.createRadialGradient(point.x, point.y, r*0.2, point.x, point.y, r);
+				g.addColorStop(0, baseColor);
+				g.addColorStop(1, 'rgba(255,255,255,0)');
+				ctx.fillStyle = g;
+				ctx.beginPath();
+				ctx.arc(point.x, point.y, r, 0, Math.PI*2);
+				ctx.fill();
+			}
+			// 还原正常混合模式
+			ctx.globalCompositeOperation='source-over';
 		}
 	}
 }
